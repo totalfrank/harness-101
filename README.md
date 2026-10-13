@@ -45,6 +45,19 @@ python -m harness.run --model $WEAK_MODEL --model $STRONG_MODEL \
 
 The output ends in a scoreboard with solved/trials, average tests passed, turns, cost and time per (model, level).
 
+## Troubleshooting
+
+The SDK runs a `claude` CLI binary bundled inside the pip package. Its stderr shows up in the transcript as `[cli] ...` lines.
+
+- **`exit code -9` straight away (macOS):** the OS killed the bundled binary. Either point the harness at your own Claude Code install:
+  ```bash
+  export HARNESS_CLI_PATH="$(which claude)"
+  ```
+  or remove the quarantine flag from the bundled binary:
+  ```bash
+  xattr -dr com.apple.quarantine "$(python -c 'import claude_agent_sdk,os;print(os.path.dirname(claude_agent_sdk.__file__))')/_bundled"
+  ```
+
 ## Calibrating the weak model (important)
 
 The demo only works if the weak model **sometimes fails at L0/L1 and can recover from feedback**. Current small Claude models are already strong enough to solve this task at L1. To get a real gap:

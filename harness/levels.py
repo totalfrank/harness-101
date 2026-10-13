@@ -8,6 +8,7 @@
                         the model sees the score as it works, not only at the end.
 """
 
+import os
 import re
 import shutil
 import tempfile
@@ -72,11 +73,20 @@ def make_workspace() -> Path:
     return ws
 
 
-def base_options(model: str, ws: Path) -> ClaudeAgentOptions:
-    return ClaudeAgentOptions(
+def common_options(model: str, ws: Path, log: Logger) -> dict:
+    return dict(
         model=model,
         cwd=str(ws),
         setting_sources=[],             # don't inherit the user's CLAUDE.md / settings
+        stderr=lambda line: log(f"    [cli] {line.rstrip()}"),
+        # Optional: use your own installed `claude` instead of the one bundled with the SDK.
+        cli_path=os.environ.get("HARNESS_CLI_PATH") or None,
+    )
+
+
+def base_options(model: str, ws: Path, log: Logger) -> ClaudeAgentOptions:
+    return ClaudeAgentOptions(
+        **common_options(model, ws, log),
         tools=["Read", "Write", "Edit", "Bash"],
         allowed_tools=["Read", "Write", "Edit", "Bash"],
         permission_mode="acceptEdits",
@@ -111,9 +121,7 @@ async def drive(prompt: str, options: ClaudeAgentOptions, result: RunResult, log
 
 # --------------------------------------------------------------------------- L0
 async def level0(model: str, ws: Path, result: RunResult, log: Logger):
-    options = ClaudeAgentOptions(
-        model=model, cwd=str(ws), setting_sources=[], tools=[], max_turns=1,
-    )
+    options = ClaudeAgentOptions(**common_options(model, ws, log), tools=[], max_turns=1)
     prompt = (
         f"{SPEC}\n\n{PROMPT} Reply with the complete contents of duration.py "
         "in a single ```python code block."
@@ -128,7 +136,7 @@ async def level0(model: str, ws: Path, result: RunResult, log: Logger):
 
 # --------------------------------------------------------------------------- L1
 async def level1(model: str, ws: Path, result: RunResult, log: Logger):
-    await drive(PROMPT, base_options(model, ws), result, log)
+    await drive(PROMPT, base_options(model, ws, log), result, log)
 
 
 # --------------------------------------------------------------------------- L2 / L3
@@ -171,13 +179,13 @@ def edit_feedback(ws: Path, log: Logger):
 
 
 async def level2(model: str, ws: Path, result: RunResult, log: Logger):
-    options = base_options(model, ws)
+    options = base_options(model, ws, log)
     options.hooks = {"Stop": [verify_gate(ws, result, log)]}
     await drive(PROMPT, options, result, log)
 
 
 async def level3(model: str, ws: Path, result: RunResult, log: Logger):
-    options = base_options(model, ws)
+    options = base_options(model, ws, log)
     options.hooks = {
         "Stop": [verify_gate(ws, result, log)],
         "PostToolUse": [edit_feedback(ws, log)],
